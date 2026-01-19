@@ -1,7 +1,3 @@
-"""
-This script evaluates a trained model against the LocoMuJoCo dataset at 1.25 m/s.
-"""
-
 import argparse
 import os
 import loco_mujoco

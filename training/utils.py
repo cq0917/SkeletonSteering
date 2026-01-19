@@ -1,11 +1,3 @@
-"""
-This module provides utility functions for model training, data interpolation and metric calculation
-used in training and evaluating speed-adaptive agents.
-
-Note:
-    get_agent and create_vail_agent are adapted from the imitation learning example in the `loco-mujoco` repository.
-    Source: https://github.com/robfiras/loco-mujoco/blob/master/examples/imitation_learning/utils.py
-"""
 from copy import deepcopy
 import yaml
 import numpy as np

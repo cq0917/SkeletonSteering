@@ -1,7 +1,3 @@
-"""
-This is an experiment file for training agents that get called by launcher.py.
-"""
-
 import os
 import numpy as np
 import torch

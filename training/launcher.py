@@ -1,6 +1,3 @@
-"""
-This script launches experiments for training agents with different parameters.
-"""
 from experiment_launcher import Launcher
 from experiment_launcher.utils import is_local
 
