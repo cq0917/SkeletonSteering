@@ -78,7 +78,7 @@ def create_vail_agent(mdp, sw, use_cuda, std_0, info_constraint, lr_beta, z_dim,
     discrim_act_mask = [] if disc_only_states else np.arange(mdp_info.action_space.shape[0])
     discrim_input_shape = (len(discrim_obs_mask) + len(discrim_act_mask),) if not disc_use_next_states else \
         (2 * len(discrim_obs_mask) + len(discrim_act_mask),)
-    discrim_standardizer = Standardizer()
+    discrim_standardizer = Standardizer(use_cuda=use_cuda)
     z_size = z_dim
     encoder_net = FullyConnectedNetwork(input_shape=discrim_input_shape, output_shape=(128,), n_features=[256],
                                         activations=['relu', 'relu'], standardizer=None,

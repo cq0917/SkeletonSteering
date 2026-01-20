@@ -5,7 +5,7 @@ from experiment_launcher.utils import is_local
 if __name__ == '__main__':
     LOCAL = is_local()
     TEST = False
-    USE_CUDA = False
+    USE_CUDA = True
 
     N_SEEDS = 1
 
@@ -43,4 +43,3 @@ tensorboard --logdir training/logs
 export MUJOCO_GL=glfw
 python eval.py --model_path logs/single_speed_reward_ratio_2026-01-19_21-24-15/reward_ratio___0.3/0/agent_epoch_79_J_64.528577.msh
 '''
-

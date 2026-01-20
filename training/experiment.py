@@ -1,16 +1,30 @@
 import os
 import numpy as np
 import torch
+import yaml
 from torch.utils.tensorboard import SummaryWriter
 from experiment_launcher import run_experiment
 from mushroom_rl.utils.dataset import compute_J, compute_episodes_length
 from mushroom_rl.core import Core
 from mushroom_rl.core.logger.logger import Logger
-from imitation_lib.utils import BestAgentSaver
 from loco_mujoco import LocoEnv
 from tqdm import tqdm
 
 from utils import get_agent, compute_mean_speed
+
+def _load_training_config(conf_path, env_id):
+    try:
+        with open(conf_path, 'r') as f:
+            confs = yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        return {}
+
+    env_key = env_id.split('.')[0]
+    conf = confs.get(env_key)
+    if conf is None:
+        env_key = ".".join(env_id.split('.')[:2])
+        conf = confs.get(env_key, {})
+    return conf.get("training_config", {})
 
 def experiment(reward_ratio: float = 0.3,
                env_id: str = "HumanoidTorque.walk.real",
@@ -28,18 +42,22 @@ def experiment(reward_ratio: float = 0.3,
     torch.random.manual_seed(seed)
 
     results_dir = os.path.join(results_dir, str(seed))
+    conf_path = os.path.join(os.path.dirname(__file__), "confs.yaml")
+    training_config = _load_training_config(conf_path, env_id)
+    save_every_n_epochs = training_config.get("save_every_n_epochs", n_epochs_save)
 
     # logging
     sw = SummaryWriter(log_dir=results_dir)     # tensorboard
     logger = Logger(results_dir=results_dir, log_name="logging", seed=seed, append=True)    # numpy
-    agent_saver = BestAgentSaver(save_path=results_dir, n_epochs_save=n_epochs_save)
+    best_reward = -float("inf")
+    best_agent_path = os.path.join(results_dir, "agent_best.msh")
 
     print(f"Starting training {env_id}...")
     # create environment, agent and core
     mdp = LocoEnv.make(env_id, headless=True)
     _ = mdp.reset()
 
-    agent = get_agent(env_id, mdp, use_cuda, sw)
+    agent = get_agent(env_id, mdp, use_cuda, sw, conf_path=conf_path)
     agent._env_reward_frac = reward_ratio
     print(f'env_reward_frac = {agent._env_reward_frac}')
     core = Core(agent, mdp)
@@ -74,9 +92,15 @@ def experiment(reward_ratio: float = 0.3,
         sw.add_scalar("Eval_J-stochastic", J_mean, epoch)
         sw.add_scalar("Eval_L-stochastic", L, epoch)
         sw.add_scalar("Eval_S-stochastic", S_mean, epoch)
-        agent_saver.save(core.agent, R_mean)
+        if R_mean > best_reward:
+            best_reward = R_mean
+            core.agent.save(best_agent_path, full_save=True)
+        if save_every_n_epochs and save_every_n_epochs > 0 and (epoch + 1) % save_every_n_epochs == 0:
+            snapshot_path = os.path.join(
+                results_dir,
+                f"agent_epoch_{epoch}_R_{R_mean:.6f}.msh")
+            core.agent.save(snapshot_path, full_save=True)
 
-    agent_saver.save_curr_best_agent()
     print("Finished.")
 
 
