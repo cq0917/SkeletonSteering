@@ -1,4 +1,4 @@
-HumanoidTorque:
+SkeletonTorque:
   algorithm: "VAIL"
   algorithm_config:
     std_0: 0.5
@@ -7,6 +7,7 @@ HumanoidTorque:
     z_dim: 128
     disc_only_states: True
     disc_use_next_states: False
+    disc_exclude_root: False
     train_disc_n_th_epoch: 3
     disc_batch_size: 2048
     learning_rate_critic: 1.0e-4
@@ -17,4 +18,4 @@ HumanoidTorque:
     use_noisy_targets: False
     last_policy_activation: "identity"
   training_config:
-    save_every_n_epochs: 500
+    save_every_n_epochs: 100

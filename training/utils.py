@@ -1,10 +1,12 @@
 from copy import deepcopy
 import yaml
 import numpy as np
+import torch
 import torch.nn.functional as F
 from torch import optim
 from mushroom_rl.policy import GaussianTorchPolicy
 from mushroom_rl.core import Core, Agent
+from mushroom_rl.utils.torch import to_float_tensor
 from imitation_lib.imitation import VAIL_TRPO
 from imitation_lib.utils import FullyConnectedNetwork, NormcInitializer, Standardizer, VariationalNet, VDBLoss
 import mujoco
@@ -15,6 +17,71 @@ from sklearn.metrics import mean_squared_error, r2_score
 
 def root_mean_squared_error(y_true, y_pred):
     return np.sqrt(mean_squared_error(y_true, y_pred))
+
+class MushroomEnvWrapper:
+    def __init__(self, env):
+        self._env = env
+
+    @property
+    def info(self):
+        return self._env.info
+
+    def reset(self, initial_state=None):
+        # MushroomRL passes an initial_state; LocoMuJoCo reset expects a PRNG key.
+        return self._env.reset()
+
+    def step(self, action):
+        obs, reward, absorbing, done, info = self._env.step(action)
+        time_limit = False
+        if done and not absorbing:
+            try:
+                time_limit = self._env._cur_step_in_episode >= self._env.info.horizon
+            except Exception:
+                time_limit = False
+        terminal = bool(absorbing or (done and not time_limit))
+        return obs, reward, terminal, info
+
+    def render(self, record=False):
+        if hasattr(self._env, "render"):
+            try:
+                return self._env.render(record)
+            except TypeError:
+                return self._env.render()
+        return None
+
+    def stop(self):
+        if hasattr(self._env, "stop"):
+            return self._env.stop()
+        return None
+
+    def __getattr__(self, name):
+        return getattr(self._env, name)
+
+def wrap_mdp_for_mushroom(env):
+    return env if isinstance(env, MushroomEnvWrapper) else MushroomEnvWrapper(env)
+
+def _get_obs_index(env, obs_name, entry_index=0):
+    obs = env.obs_container[obs_name]
+    obs_ind = np.array(obs.obs_ind).reshape(-1)
+    return int(obs_ind[entry_index])
+
+def _build_demonstrations(mdp):
+    demos = mdp.create_dataset()
+    if hasattr(demos, "to_np"):
+        demos = demos.to_np()
+    if isinstance(demos, dict):
+        return demos
+    if hasattr(demos, "observations"):
+        demo_dict = dict(
+            states=np.array(demos.observations),
+            next_states=np.array(demos.next_observations),
+            absorbing=np.array(demos.absorbings),
+        )
+        actions = getattr(demos, "actions", None)
+        if actions is not None and np.size(actions) > 0:
+            demo_dict["actions"] = np.array(actions)
+        return demo_dict
+    return demos
 
 def get_agent(env_id, mdp, use_cuda, sw, conf_path=None):
 
@@ -44,9 +111,9 @@ def get_agent(env_id, mdp, use_cuda, sw, conf_path=None):
 def create_vail_agent(mdp, sw, use_cuda, std_0, info_constraint, lr_beta, z_dim, disc_only_states,
                       disc_use_next_states, train_disc_n_th_epoch, disc_batch_size, learning_rate_critic,
                       learning_rate_disc, policy_entr_coef, max_kl, n_epochs_cg, use_noisy_targets,
-                      last_policy_activation):
+                      last_policy_activation, disc_exclude_root=False):
     mdp_info = deepcopy(mdp.info)
-    expert_data = mdp.create_dataset()
+    expert_data = _build_demonstrations(mdp)
 
     trpo_standardizer = Standardizer(use_cuda=use_cuda)
     policy_params = dict(network=FullyConnectedNetwork,
@@ -74,7 +141,16 @@ def create_vail_agent(mdp, sw, use_cuda, std_0, info_constraint, lr_beta, z_dim,
                          n_features=[512, 256],
                          use_cuda=use_cuda)
 
-    discrim_obs_mask = mdp.get_kinematic_obs_mask()
+    discrim_obs_mask = np.arange(mdp_info.observation_space.shape[0])
+    if disc_exclude_root:
+        root_indices = []
+        for obs_name in ("q_root", "dq_root"):
+            if hasattr(mdp, "obs_container") and obs_name in mdp.obs_container:
+                obs_ind = np.array(mdp.obs_container[obs_name].obs_ind).reshape(-1)
+                root_indices.extend(obs_ind.tolist())
+        if root_indices:
+            root_set = set(root_indices)
+            discrim_obs_mask = np.array([i for i in discrim_obs_mask if i not in root_set], dtype=int)
     discrim_act_mask = [] if disc_only_states else np.arange(mdp_info.action_space.shape[0])
     discrim_input_shape = (len(discrim_obs_mask) + len(discrim_act_mask),) if not disc_use_next_states else \
         (2 * len(discrim_obs_mask) + len(discrim_act_mask),)
@@ -122,11 +198,26 @@ def create_vail_agent(mdp, sw, use_cuda, std_0, info_constraint, lr_beta, z_dim,
     return agent
 
 def compute_mean_speed(env, dataset):
-    x_vel_idx = env.get_obs_idx("dq_pelvis_tx")
+    x_vel_idx = _get_obs_index(env, "dq_root", entry_index=0)
     speeds = []
     for i in range(len(dataset)):
         speeds.append(dataset[i][0][x_vel_idx])
     return np.mean(speeds)
+
+def _set_agent_deterministic(agent):
+    policy = agent.policy
+    if not hasattr(policy, "get_mean_and_chol"):
+        return
+
+    def _draw_action_det(state, _agent=agent, _policy=policy):
+        if _agent.phi is not None:
+            state = _agent.phi(state)
+        with torch.no_grad():
+            s = to_float_tensor(np.atleast_2d(state), _policy.use_cuda)
+            mu, _ = _policy.get_mean_and_chol(s)
+        return torch.squeeze(mu, dim=0).detach().cpu().numpy()
+
+    agent.draw_action = _draw_action_det
 
 def process_data(
         agent,
@@ -150,12 +241,12 @@ def process_data(
         motor_indices = env._action_indices
         motor_names = [mujoco.mj_id2name(env._model, mujoco.mjtObj.mjOBJ_ACTUATOR, idx) for idx in motor_indices]
     obs_keys = dict(
-        q_hip_flexion_l=9,
-        q_knee_angle_l=12,
-        q_ankle_angle_l=13,
-        dq_hip_flexion_l=28,
-        dq_knee_angle_l=31,
-        dq_ankle_angle_l=32,
+        q_hip_flexion_l=_get_obs_index(env, "q_hip_flexion_l"),
+        q_knee_angle_l=_get_obs_index(env, "q_knee_angle_l"),
+        q_ankle_angle_l=_get_obs_index(env, "q_ankle_angle_l"),
+        dq_hip_flexion_l=_get_obs_index(env, "dq_hip_flexion_l"),
+        dq_knee_angle_l=_get_obs_index(env, "dq_knee_angle_l"),
+        dq_ankle_angle_l=_get_obs_index(env, "dq_ankle_angle_l"),
     )
     act_keys = dict(
         mot_hip_flexion_l=motor_names.index('mot_hip_flexion_l'),
@@ -194,10 +285,18 @@ def process_data(
                     if key not in cycles:
                         cycles[key] = []
                     cycles[key].append(data[key][heel_strikes[i]:heel_strikes[i+1]])
+        effective_cycles = 0
+        if cycles:
+            sample_key = next(iter(cycles))
+            effective_cycles = len(cycles[sample_key])
         print(f'Number of recorded cycle: {len(cycle_lengths)}')
-        print(f'Number of effective cycle: {len(cycles[key])}')
+        print(f'Number of effective cycle: {effective_cycles}')
+        if effective_cycles == 0:
+            raise ValueError(
+                "No effective gait cycles detected. Try increasing n_episodes, "
+                "lowering cycle_length_cutoff, or adjusting peak detection.")
         cycless.append(cycles)
-    x_vel_idx = env.get_obs_idx("dq_pelvis_tx")
+    x_vel_idx = _get_obs_index(env, "dq_root", entry_index=0)
     speedss = []
     for dataset in datasets:
         speeds = []
@@ -209,7 +308,8 @@ def process_data(
     interpolated_cycless = []
     mean_lengths = []
     for cycles in cycless:
-        cycles_lengths = [len(cycle) for cycle in cycles[key]]
+        sample_key = next(iter(cycles))
+        cycles_lengths = [len(cycle) for cycle in cycles[sample_key]]
         mean_length = round(np.mean(cycles_lengths))
         mean_lengths.append(mean_length)
         interpolated_cycles = {}
@@ -288,8 +388,11 @@ def calculate_metrics(eval_data, ground_truth):
 
     return metric
 
-def eval_model(mdp, model_file, speed_range, mass, n_trials=5, n_episodes=1, cycle_length_cutoff=40, record=False):
+def eval_model(mdp, model_file, speed_range, mass, n_trials=5, n_episodes=1, cycle_length_cutoff=40, record=False,
+               deterministic=False, print_joint_stats=False):
     agent = Agent.load(model_file)
+    if deterministic:
+        _set_agent_deterministic(agent)
     data_dict = {}
     use_speed_wrapper = hasattr(mdp, "set_operate_speed")
     for target_speed in speed_range:
@@ -308,6 +411,18 @@ def eval_model(mdp, model_file, speed_range, mass, n_trials=5, n_episodes=1, cyc
         data_dict[target_speed]['data'] = data
         data_dict[target_speed]['mean_length'] = mean_length
         data_dict[target_speed]['speeds'] = speeds
+        if print_joint_stats:
+            for j in range(n_trials):
+                hip = np.rad2deg(np.asarray(data[j]["q_hip_flexion_l"]))
+                knee = np.rad2deg(np.asarray(data[j]["q_knee_angle_l"]))
+                ankle = np.rad2deg(np.asarray(data[j]["q_ankle_angle_l"]))
+                p10_h, p50_h, p90_h = np.percentile(hip, [10, 50, 90])
+                p10_k, p50_k, p90_k = np.percentile(knee, [10, 50, 90])
+                p10_a, p50_a, p90_a = np.percentile(ankle, [10, 50, 90])
+                print(f"Policy joint angle stats (deg) trial {j} speed {target_speed}:")
+                print(f"  q_hip_flexion_l: min={hip.min():.2f} p10={p10_h:.2f} p50={p50_h:.2f} p90={p90_h:.2f} max={hip.max():.2f}")
+                print(f"  q_knee_angle_l: min={knee.min():.2f} p10={p10_k:.2f} p50={p50_k:.2f} p90={p90_k:.2f} max={knee.max():.2f}")
+                print(f"  q_ankle_angle_l: min={ankle.min():.2f} p10={p10_a:.2f} p50={p50_a:.2f} p90={p90_a:.2f} max={ankle.max():.2f}")
     processed_datas = []
     for i in range(n_trials):
         processed_data = {}

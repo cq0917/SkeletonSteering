@@ -2,7 +2,12 @@ __pycache__/
 logs/
 mushroom_rl_recordings/
 ls-iq/
+SkeletonSteering_0.4.1/
+loco-mujoco-0.4.1
+loco-mujoco-1.0.1
 .ipynb_checkpoints/
 *.pkl
 notes.txt
 AGENTS.md
+0.4.1.mp4
+1.0.1.mp4

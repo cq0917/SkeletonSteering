@@ -1,16 +1,26 @@
 import os
+
 import numpy as np
 import torch
 import yaml
+os.environ.setdefault("JAX_PLATFORM_NAME", "cpu")
 from torch.utils.tensorboard import SummaryWriter
 from experiment_launcher import run_experiment
 from mushroom_rl.utils.dataset import compute_J, compute_episodes_length
 from mushroom_rl.core import Core
 from mushroom_rl.core.logger.logger import Logger
-from loco_mujoco import LocoEnv
+from loco_mujoco import ImitationFactory
+from loco_mujoco.task_factories import DefaultDatasetConf
 from tqdm import tqdm
 
-from utils import get_agent, compute_mean_speed
+from utils import get_agent, compute_mean_speed, wrap_mdp_for_mushroom
+
+def _parse_env_id(env_id: str):
+    parts = env_id.split(".")
+    env_name = parts[0] if parts else env_id
+    task = parts[1] if len(parts) > 1 else "walk"
+    dataset_type = parts[2] if len(parts) > 2 else "mocap"
+    return env_name, task, dataset_type
 
 def _load_training_config(conf_path, env_id):
     try:
@@ -26,8 +36,8 @@ def _load_training_config(conf_path, env_id):
         conf = confs.get(env_key, {})
     return conf.get("training_config", {})
 
-def experiment(reward_ratio: float = 0.3,
-               env_id: str = "HumanoidTorque.walk.real",
+def experiment(reward_ratio: float = 0.1,
+               env_id: str = "SkeletonTorque.walk.mocap",
                n_epochs: int = 500,
                n_steps_per_epoch: int = 10000,
                n_steps_per_fit: int = 1024,
@@ -54,7 +64,22 @@ def experiment(reward_ratio: float = 0.3,
 
     print(f"Starting training {env_id}...")
     # create environment, agent and core
-    mdp = LocoEnv.make(env_id, headless=True)
+    env_name, task, dataset_type = _parse_env_id(env_id)
+    target_velocity = 1.25
+    if task == "run":
+        target_velocity = 2.5
+    mdp = ImitationFactory.make(
+        env_name,
+        default_dataset_conf=DefaultDatasetConf(task=task, dataset_type=dataset_type),
+        reward_type="TargetXVelocityReward",
+        reward_params=dict(target_velocity=target_velocity),
+        timestep=0.001,
+        n_substeps=10,
+        horizon=1000,
+        use_box_feet=True,
+        disable_arms=True,
+        headless=True)
+    mdp = wrap_mdp_for_mushroom(mdp)
     _ = mdp.reset()
 
     agent = get_agent(env_id, mdp, use_cuda, sw, conf_path=conf_path)

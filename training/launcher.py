@@ -20,12 +20,12 @@ if __name__ == '__main__':
         n_epochs=4000,
         n_steps_per_epoch=5000,
         n_epochs_save=100,
-        n_eval_episodes=5,
+        n_eval_episodes=2,
         n_steps_per_fit=1000,
         use_cuda=USE_CUDA,
-        env_id="HumanoidTorque.walk.real",)
+        env_id="SkeletonTorque.walk.mocap",)
 
-    reward_ratios = [0.3]
+    reward_ratios = [0.1]
 
     for reward_ratio in reward_ratios:
         launcher.add_experiment(reward_ratio__=reward_ratio, **default_params)
@@ -41,5 +41,6 @@ tensorboard --logdir training/logs
 
 评估:
 export MUJOCO_GL=glfw
-python eval.py --model_path logs/single_speed_reward_ratio_2026-01-19_21-24-15/reward_ratio___0.3/0/agent_epoch_79_J_64.528577.msh
+python eval.py --record --print_joint_stats --model_path logs/1.0.1_01_21/reward_ratio___0.1/0/agent_best.msh
+--compare_expert  用于加载专家速度用于对比
 '''
