@@ -1,0 +1,52 @@
+experiment:
+  task_factory:
+    name: ImitationFactory
+    params:
+      default_dataset_conf:
+        task: walk
+        dataset_type: mocap
+  env_params:
+    env_name: MjxSkeletonTorque
+    disable_arms: true
+    use_box_feet: true
+    headless: true
+    horizon: 1000
+    timestep: 0.001
+    n_substeps: 10
+    reward_type: TargetXVelocityReward
+    reward_params:
+      target_velocity: 1.25
+  hidden_layers: [512, 256]
+  lr: 5.0e-4
+  disc_lr: 1.0e-5
+  num_envs: 256
+  num_steps: 32
+  total_timesteps: 50000000
+  update_epochs: 6
+  disc_minibatch_size: 1024
+  proportion_env_reward: 0
+  n_disc_epochs: 3
+  num_minibatches: 16
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_eps: 0.2
+  init_std: 0.15
+  learnable_std: false
+  ent_coef: 0.0
+  disc_ent_coef: 1e-3
+  vf_coef: 0.5
+  max_grad_norm: 0.9
+  activation: tanh
+  anneal_lr: true
+  weight_decay: 0.0
+  normalize_env: false
+  debug: true
+  n_seeds: 1
+  vmap_across_seeds: false
+  obs_history_len: 1
+  len_obs_history: 1
+  validation:
+    active: false
+    num_steps: 100
+    num_envs: 16
+    num: 10

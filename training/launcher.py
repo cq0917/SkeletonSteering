@@ -1,3 +1,5 @@
+import os
+
 from experiment_launcher import Launcher
 from experiment_launcher.utils import is_local
 
@@ -9,26 +11,32 @@ if __name__ == '__main__':
 
     N_SEEDS = 1
 
+    base_dir = os.path.join(os.path.dirname(__file__), "logs")
     launcher = Launcher(
-        exp_name='single_speed_reward_ratio',
+        exp_name='amp_ppo_single_speed',
         exp_file='experiment',
         n_seeds=N_SEEDS,
         n_exps_in_parallel=1,
-        use_timestamp=True,)
+        use_timestamp=True,
+        base_dir=base_dir,)
 
     default_params = dict(
-        n_epochs=4000,
-        n_steps_per_epoch=5000,
-        n_epochs_save=100,
-        n_eval_episodes=2,
-        n_steps_per_fit=1000,
+        total_timesteps=50000000,
+        num_envs=256,
+        num_steps=32,
+        num_minibatches=16,
+        update_epochs=4,
+        disc_minibatch_size=2048,
+        n_disc_epochs=20,
+        lr=1.0e-4,
+        disc_lr=1.0e-4,
         use_cuda=USE_CUDA,
         env_id="SkeletonTorque.walk.mocap",)
 
-    reward_ratios = [0.1]
+    proportion_env_rewards = [0.1]
 
-    for reward_ratio in reward_ratios:
-        launcher.add_experiment(reward_ratio__=reward_ratio, **default_params)
+    for proportion_env_reward in proportion_env_rewards:
+        launcher.add_experiment(proportion_env_reward__=proportion_env_reward, **default_params)
 
     launcher.run(LOCAL, TEST)
 
@@ -36,11 +44,10 @@ if __name__ == '__main__':
 
 '''
 训练：
-python launcher.py
-tensorboard --logdir training/logs
+python training/launcher.py
+tensorboard --logdir 'logs/'
 
-评估:
+评估 (AMP 保存为 .pkl):
 export MUJOCO_GL=glfw
-python eval.py --record --print_joint_stats --model_path logs/1.0.1_01_21/reward_ratio___0.1/0/agent_best.msh
---compare_expert  用于加载专家速度用于对比
+python training/eval_amp.py --record --model_path logs/amp_ppo_single_speed_2026-01-22_15-31-27/proportion_env_reward___0.1/0/AMPJax_saved.pkl 
 '''
