@@ -72,3 +72,20 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+'''
+训练：
+python training/train_amp_ppo_jax.py --seed 42 \
+    --config training/amp_ppo_jax_conf.yaml --env_id SkeletonTorque.walk.mocap
+
+tensorboard --logdir 'training/logs'
+
+
+
+评估 (AMP 保存为 .pkl):
+export MUJOCO_GL=glfw
+python training/eval_amp_ppo_jax.py \
+    --record --n_steps 2000 --deterministic \
+    --model_path training/logs/amp_ppo_jax_2026-01-25_17-16-15/amp_ppo_jax_best.pkl
+'''
