@@ -5,6 +5,7 @@ ls-iq/
 SkeletonSteering_0.4.1/
 loco-mujoco-0.4.1
 loco-mujoco-1.0.1
+AmpSteering
 .ipynb_checkpoints/
 *.pkl
 notes.txt

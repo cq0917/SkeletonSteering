@@ -8,7 +8,7 @@ from torch.utils.tensorboard import SummaryWriter
 from experiment_launcher import run_experiment
 
 from loco_mujoco import TaskFactory
-from loco_mujoco.algorithms import AMPJax
+from amp_override import AMPJax
 from loco_mujoco.core.utils import Box, MDPInfo
 from loco_mujoco.trajectory import Trajectory
 from loco_mujoco.trajectory.dataclasses import TrajectoryTransitions
@@ -230,15 +230,51 @@ def _log_metrics(sw, metrics, prefix: str, n_seeds: int):
     mean_length = _maybe_mean(metrics.mean_episode_length, n_seeds)
     disc_policy = _maybe_mean(getattr(metrics, "discriminator_output_policy", None), n_seeds)
     disc_expert = _maybe_mean(getattr(metrics, "discriminator_output_expert", None), n_seeds)
+    reward_env = _maybe_mean(getattr(metrics, "reward_env", None), n_seeds)
+    reward_disc = _maybe_mean(getattr(metrics, "reward_disc", None), n_seeds)
+    reward_total = _maybe_mean(getattr(metrics, "reward_total", None), n_seeds)
+    disc_loss = _maybe_mean(getattr(metrics, "disc_loss", None), n_seeds)
+    disc_acc = _maybe_mean(getattr(metrics, "disc_acc", None), n_seeds)
+    disc_entropy = _maybe_mean(getattr(metrics, "disc_entropy", None), n_seeds)
+    disc_gap = _maybe_mean(getattr(metrics, "disc_output_gap", None), n_seeds)
+    policy_loss = _maybe_mean(getattr(metrics, "policy_loss", None), n_seeds)
+    value_loss = _maybe_mean(getattr(metrics, "value_loss", None), n_seeds)
+    policy_entropy = _maybe_mean(getattr(metrics, "policy_entropy", None), n_seeds)
+    approx_kl = _maybe_mean(getattr(metrics, "approx_kl", None), n_seeds)
+    clip_frac = _maybe_mean(getattr(metrics, "clip_frac", None), n_seeds)
 
     for i in range(len(steps)):
         step = int(steps[i])
         sw.add_scalar(f"{prefix}/MeanEpisodeReturn", float(mean_return[i]), step)
         sw.add_scalar(f"{prefix}/MeanEpisodeLength", float(mean_length[i]), step)
+        if reward_env is not None:
+            sw.add_scalar(f"{prefix}/Reward/Env", float(reward_env[i]), step)
+        if reward_disc is not None:
+            sw.add_scalar(f"{prefix}/Reward/Disc", float(reward_disc[i]), step)
+        if reward_total is not None:
+            sw.add_scalar(f"{prefix}/Reward/Total", float(reward_total[i]), step)
         if disc_policy is not None:
             sw.add_scalar(f"{prefix}/DiscriminatorPolicy", float(disc_policy[i]), step)
         if disc_expert is not None:
             sw.add_scalar(f"{prefix}/DiscriminatorExpert", float(disc_expert[i]), step)
+        if disc_loss is not None:
+            sw.add_scalar(f"{prefix}/DiscriminatorLoss", float(disc_loss[i]), step)
+        if disc_acc is not None:
+            sw.add_scalar(f"{prefix}/DiscriminatorAcc", float(disc_acc[i]), step)
+        if disc_entropy is not None:
+            sw.add_scalar(f"{prefix}/DiscriminatorEntropy", float(disc_entropy[i]), step)
+        if disc_gap is not None:
+            sw.add_scalar(f"{prefix}/DiscriminatorOutputGap", float(disc_gap[i]), step)
+        if policy_loss is not None:
+            sw.add_scalar(f"{prefix}/PPO/PolicyLoss", float(policy_loss[i]), step)
+        if value_loss is not None:
+            sw.add_scalar(f"{prefix}/PPO/ValueLoss", float(value_loss[i]), step)
+        if policy_entropy is not None:
+            sw.add_scalar(f"{prefix}/PPO/Entropy", float(policy_entropy[i]), step)
+        if approx_kl is not None:
+            sw.add_scalar(f"{prefix}/PPO/ApproxKL", float(approx_kl[i]), step)
+        if clip_frac is not None:
+            sw.add_scalar(f"{prefix}/PPO/ClipFrac", float(clip_frac[i]), step)
 
 
 def experiment(env_id: str = "SkeletonTorque.walk.mocap",

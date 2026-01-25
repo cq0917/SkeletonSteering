@@ -44,10 +44,16 @@ if __name__ == '__main__':
 
 '''
 训练：
-python training/launcher.py
-tensorboard --logdir 'logs/'
+python training/train_amp_ppo_jax.py --seed 42 \
+    --config training/amp_ppo_jax_conf.yaml --env_id SkeletonTorque.walk.mocap
+
+tensorboard --logdir 'training/logs'
+
+
 
 评估 (AMP 保存为 .pkl):
 export MUJOCO_GL=glfw
-python training/eval_amp.py --record --model_path logs/amp_ppo_single_speed_2026-01-22_15-31-27/proportion_env_reward___0.1/0/AMPJax_saved.pkl 
+python training/eval_amp_ppo_jax.py \
+    --record --n_steps 2000 --deterministic \
+    --model_path training/logs/amp_ppo_jax_2026-01-25_02-05-45/amp_ppo_jax_best.pkl
 '''

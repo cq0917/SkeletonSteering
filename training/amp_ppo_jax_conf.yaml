@@ -1,0 +1,81 @@
+env:
+  task_factory:
+    name: ImitationFactory
+    params:
+      default_dataset_conf:
+        task: walk
+        dataset_type: mocap
+      custom_traj_path: /home/robot/.cache/huggingface/hub/datasets--robfiras--loco-mujoco-datasets/snapshots/75479db3e07a86a4477982ca8a706b8a45828974/DefaultDatasets/mocap/SkeletonTorque/walk.npz
+  env_params:
+    env_name: MjxSkeletonTorque
+    disable_arms: true
+    use_box_feet: true
+    headless: true
+    horizon: 1000
+    timestep: 0.001
+    n_substeps: 10
+    reward_type: TargetXVelocityReward
+    reward_params:
+      target_velocity: 1.25
+
+ppo:
+  total_timesteps: 300000000
+  num_envs: 256
+  steps_per_iter: 32
+  update_epochs: 5
+  minibatch_size: 1024
+  discount: 0.99
+  td_lambda: 0.95
+  clip_ratio: 0.2
+
+model:
+  actor_hidden_layers: [1024, 512]
+  critic_hidden_layers: [1024, 512]
+  disc_hidden_layers: [1024, 512]
+  activation: relu
+  actor_init_scale: 0.01
+  disc_init_scale: 1.0
+  action_std: 0.05
+
+optim:
+  type: Adam
+  learning_rate: 5.0e-5
+  weight_decay: 0.0
+  grad_clip: 0.75
+
+disc:
+  buffer_size: 200000
+  replay_samples: 1000
+  batch_size: 2048
+  loss_weight: 5.0
+  grad_penalty: 5.0
+  reward_scale: 2.0
+  buffer_on_cpu: false
+  demo_on_cpu: false
+
+disc_obs:
+  history_len: 4
+  obs_history_len: 1
+  global_obs: false
+  root_height_obs: true
+  key_bodies: []
+  key_sites: []
+
+reward:
+  task_weight: 0.5
+  disc_weight: 0.5
+
+normalizer:
+  samples: 100000000
+  obs_clip: 10.0
+  disc_clip: 10.0
+  min_std: 1.0e-4
+
+train:
+  log_interval: 10
+  jit_rollout: true
+  jit_update: true
+  block_until_ready: true
+  tensorboard: true
+  tensorboard_dir: tensorboard
+  save_best: true

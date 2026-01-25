@@ -9,7 +9,7 @@ from flax import struct
 from omegaconf import OmegaConf
 
 from loco_mujoco import TaskFactory
-from loco_mujoco.algorithms import AMPJax
+from amp_override import AMPJax
 from loco_mujoco.core.utils import Box, MDPInfo
 
 
@@ -140,10 +140,13 @@ def main():
     if args.record:
         record_root = os.path.join(os.path.dirname(__file__), "mushroom_rl_recordings")
         tag = datetime.datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
-        viewer_params = config.experiment.env_params.get("viewer_params", {})
         recorder_params = dict(path=record_root, tag=tag)
-        viewer_params["recorder_params"] = recorder_params
-        config.experiment.env_params["viewer_params"] = viewer_params
+        config.experiment.env_params["recorder_params"] = recorder_params
+
+    if "viewer_params" in config.experiment.env_params:
+        viewer_params = config.experiment.env_params.pop("viewer_params") or {}
+        for key, value in viewer_params.items():
+            config.experiment.env_params[key] = value
     if args.mjx:
         config.experiment.env_params["headless"] = True
     else:
