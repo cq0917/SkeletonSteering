@@ -5,7 +5,7 @@ env:
       default_dataset_conf:
         task: walk
         dataset_type: mocap
-      custom_traj_path: /home/robot/.cache/huggingface/hub/datasets--robfiras--loco-mujoco-datasets/snapshots/75479db3e07a86a4477982ca8a706b8a45828974/DefaultDatasets/mocap/SkeletonTorque/walk.npz
+      custom_traj_path: training/kit_expert_traj.npz
   env_params:
     env_name: MjxSkeletonTorque
     disable_arms: true

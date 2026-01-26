@@ -10,5 +10,5 @@ AmpSteering
 *.pkl
 notes.txt
 AGENTS.md
-0.4.1.mp4
-1.0.1.mp4
+expert_dataset/
+training/kit_expert_traj.npz

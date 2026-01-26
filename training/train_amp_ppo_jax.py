@@ -77,9 +77,15 @@ if __name__ == "__main__":
 '''
 训练：
 python training/train_amp_ppo_jax.py --seed 42 \
-    --config training/amp_ppo_jax_conf.yaml --env_id SkeletonTorque.walk.mocap
+    --config training/amp_ppo_jax_conf.yaml 
 
 tensorboard --logdir 'training/logs'
+
+
+用CPU临时跑通:
+JAX_PLATFORM_NAME=cpu CUDA_VISIBLE_DEVICES="" \
+python training/train_amp_ppo_jax.py --config training/amp_ppo_jax_conf.yaml --seed 42 --jax_cpu
+
 
 
 
@@ -87,5 +93,5 @@ tensorboard --logdir 'training/logs'
 export MUJOCO_GL=glfw
 python training/eval_amp_ppo_jax.py \
     --record --n_steps 2000 --deterministic \
-    --model_path training/logs/amp_ppo_jax_2026-01-25_17-16-15/amp_ppo_jax_best.pkl
+    --model_path training/logs/amp_ppo_jax_2026-01-25_23-28-00/amp_ppo_jax_best.pkl
 '''
